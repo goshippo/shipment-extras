@@ -9,34 +9,61 @@ This test suite empirically discovers which shipment extras are supported by eac
 ## Quick Start
 
 ```bash
-# 1. Set your API key
+# 1. Install dependencies (requires uv)
+make install-dev
+
+# 2. Set your API key
 export SHIPPO_API_KEY="shippo_test_xxxxx"  # Use test key first
 
-# 2. Verify your carriers are connected
-python test_shippo_extras.py --list-carriers
+# 3. Verify your carriers are connected
+make list-carriers
 
-# 3. Run a small test to validate setup
-python test_shippo_extras.py --carrier usps --max-tests 10
+# 4. Run a quick test to validate setup
+make run-discovery-quick
 
-# 4. Run full test suite
-python test_shippo_extras.py
+# 5. Run full test suite
+make run-discovery
 ```
 
 ---
 
 ## Prerequisites
 
-### 1. Python Environment
+### 1. Install uv
+
+This project uses [uv](https://docs.astral.sh/uv/) for fast, reliable dependency management.
 
 ```bash
-# Python 3.8+ required
-python --version
+# Install uv (macOS/Linux)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install requests (only external dependency)
-pip install requests
+# Or with Homebrew
+brew install uv
+
+# Verify installation
+uv --version
 ```
 
-### 2. Shippo API Key
+### 2. Python Environment
+
+```bash
+# Python 3.11+ required (for async features)
+python --version
+
+# Install dependencies via Makefile
+make install-dev
+
+# Or install directly with uv
+uv sync
+```
+
+**Dependencies:**
+- `httpx>=0.25.0` - Async HTTP client with connection pooling
+- `pytest>=7.0.0` - Test framework (dev)
+- `pytest-asyncio>=0.21.0` - Async test support (dev)
+- `ruff>=0.1.0` - Linting and formatting (dev)
+
+### 3. Shippo API Key
 
 Get your API key from [Shippo Dashboard](https://apps.goshippo.com/settings/api):
 
@@ -48,9 +75,9 @@ export SHIPPO_API_KEY="shippo_test_xxxxxxxxxxxxxxxxxxxxx"
 export SHIPPO_API_KEY="shippo_live_xxxxxxxxxxxxxxxxxxxxx"
 ```
 
-### 3. Connected Carrier Accounts
+### 4. Connected Carrier Accounts
 
-The tests only work for carriers you have connected in your Shippo account. To connect carriers:
+The tests only work for carriers you have connected in your Shippo account:
 
 1. Go to [Shippo Carriers](https://apps.goshippo.com/settings/carriers)
 2. Add the carriers you want to test
@@ -58,43 +85,90 @@ The tests only work for carriers you have connected in your Shippo account. To c
 
 ---
 
+## Makefile Targets
+
+The project includes a comprehensive Makefile for development workflow automation:
+
+### Setup
+
+```bash
+make install        # Install runtime dependencies only
+make install-dev    # Install with development dependencies
+make sync           # Sync dependencies from lockfile
+```
+
+### Quality Assurance
+
+```bash
+make lint           # Run ruff linter
+make format         # Format code with ruff
+make test           # Run async behavior test suite
+make test-cov       # Run tests with coverage
+make quality        # Run all quality checks (lint + test)
+```
+
+### Discovery Tests
+
+```bash
+make list-carriers  # List connected carrier accounts
+make list-extras    # List all testable extras
+make run-discovery  # Run basic discovery tests
+make run-comparative # Run comparative analysis
+make run-analyzer   # Run service level analyzer
+```
+
+### Custom Runs
+
+```bash
+# Test specific carrier
+make run-carrier CARRIER=usps
+
+# Run with higher concurrency (faster)
+make run-fast CONCURRENCY=20
+```
+
+---
+
 ## Test Modules Explained
 
-### Module 1: `test_shippo_extras.py` - Basic Discovery
+### Module 1: `shippo_extras.py` - Basic Discovery
 
 **Purpose**: Quickly determine if each extra is accepted or rejected for each carrier/service level.
 
 **How it works**:
-1. Creates a shipment with a specific extra
+1. Creates shipments with a specific extra (async parallel requests)
 2. Checks if the API returns rates or errors
 3. Categorizes the result
 
 **Best for**: Initial discovery, quick validation
 
 ```bash
-# Full test
-python test_shippo_extras.py
+# Full run
+uv run python src/shippo_extras.py
+
+# With concurrency control (default: 5)
+uv run python src/shippo_extras.py -j 10  # 10 parallel requests
 
 # See all available extras
-python test_shippo_extras.py --list-extras
+uv run python src/shippo_extras.py --list-extras
 
 # See your connected carriers
-python test_shippo_extras.py --list-carriers
+uv run python src/shippo_extras.py --list-carriers
 
-# Test specific carriers
-python test_shippo_extras.py -c usps -c fedex -c ups
+# Validate specific carriers
+uv run python src/shippo_extras.py -c usps -c fedex -c ups
 
-# Test specific service levels
-python test_shippo_extras.py -c fedex -s fedex_ground -s fedex_2_day
+# Validate specific service levels
+uv run python src/shippo_extras.py -c fedex -s fedex_ground -s fedex_2_day
 
-# Test specific extras
-python test_shippo_extras.py -e signature_confirmation -e insurance_shippo
+# Validate specific extras
+uv run python src/shippo_extras.py -e signature_confirmation -e insurance_shippo
 
-# Limit number of tests (for quick validation)
-python test_shippo_extras.py --max-tests 50
+# Limit number of validations (for quick check)
+uv run python src/shippo_extras.py --max-tests 50
 
 # Custom output filename
-python test_shippo_extras.py -o my_company_results
+uv run python src/shippo_extras.py -o my_company_results
 ```
 
 **Output files**:
@@ -106,29 +180,32 @@ python test_shippo_extras.py -o my_company_results
 
 ---
 
-### Module 2: `comparative_test.py` - Detailed Analysis
+### Module 2: `comparative_runner.py` - Detailed Analysis
 
 **Purpose**: Distinguish between "supported", "rejected", and "silently ignored" extras.
 
 **How it works**:
 1. Creates a **baseline** shipment without any extras
-2. Creates a shipment **with** each extra
+2. Creates shipments **with** each extra (async parallel)
 3. Compares the two responses to determine actual support
 
 **Best for**: Accurate capability mapping, finding extras that affect rates
 
 ```bash
-# Full comparative test
-python comparative_test.py
+# Full comparative run
+uv run python src/comparative_runner.py
+
+# With concurrency control
+uv run python src/comparative_runner.py -j 10
 
 # With filters
-python comparative_test.py -c ups -c fedex
+uv run python src/comparative_runner.py -c ups -c fedex
 
-# Limit tests
-python comparative_test.py --max-tests 100
+# Limit validations
+uv run python src/comparative_runner.py --max-tests 100
 
 # Custom output
-python comparative_test.py -o comparative_results
+uv run python src/comparative_runner.py -o comparative_results
 ```
 
 **Result types explained**:
@@ -156,20 +233,23 @@ python comparative_test.py -o comparative_results
 
 **How it works**:
 1. Categorizes service levels (express, ground, economy, etc.)
-2. Tests extras against each service level
+2. Tests extras against each service level (async parallel)
 3. Identifies extras that vary by service level within a carrier
 
 **Best for**: Understanding service-level-specific restrictions
 
 ```bash
 # Full analysis
-python service_level_analyzer.py
+uv run python analysis/service_level_analyzer.py
+
+# With concurrency control
+uv run python analysis/service_level_analyzer.py -j 10
 
 # Specific carrier
-python service_level_analyzer.py -c fedex
+uv run python analysis/service_level_analyzer.py -c fedex
 
 # Custom output
-python service_level_analyzer.py -o service_analysis
+uv run python analysis/service_level_analyzer.py -o service_analysis
 ```
 
 **Output files**:
@@ -181,6 +261,44 @@ python service_level_analyzer.py -o service_analysis
 
 ---
 
+## Async Architecture
+
+### Concurrency Control
+
+All test scripts use async HTTP with configurable concurrency:
+
+```bash
+# Default: 5 concurrent requests
+uv run python src/shippo_extras.py
+
+# Increase for faster execution
+uv run python src/shippo_extras.py -j 20
+
+# Decrease if hitting rate limits
+uv run python src/shippo_extras.py -j 2
+```
+
+### Rate Limiting
+
+The test suite includes intelligent rate limiting:
+
+- **Semaphore-based concurrency**: Limits parallel requests
+- **Header monitoring**: Tracks `X-RateLimit-Remaining` headers
+- **Proactive waiting**: Slows down when approaching limits
+- **Automatic retry**: Handles 429 responses with exponential backoff
+
+### Race Condition Protection
+
+Shared resources (like baseline caches) are protected with `asyncio.Lock`:
+
+```python
+async with self._baseline_lock:
+    if cache_key in self.baseline_cache:
+        return self.baseline_cache[cache_key]
+```
+
+---
+
 ## Complete Workflow
 
 ### Step 1: Initial Discovery
@@ -189,10 +307,10 @@ Run basic tests to see what's available:
 
 ```bash
 # List your carriers first
-python test_shippo_extras.py --list-carriers
+make list-carriers
 
-# Quick test with one carrier
-python test_shippo_extras.py -c usps --max-tests 20
+# Quick run with one carrier
+uv run python src/shippo_extras.py -c usps --max-tests 20
 
 # Review results
 cat shippo_extras_results_report.md
@@ -204,7 +322,7 @@ Run comparative tests for accurate results:
 
 ```bash
 # Run comparative analysis
-python comparative_test.py -c usps -c fedex -c ups
+uv run python src/comparative_runner.py -c usps -c fedex -c ups
 
 # Review the support matrix
 cat shippo_comparative_results.md
@@ -216,7 +334,7 @@ Find service-level-specific patterns:
 
 ```bash
 # Analyze service levels
-python service_level_analyzer.py
+uv run python analysis/service_level_analyzer.py
 
 # Review patterns
 cat shippo_service_level_report.md
@@ -239,10 +357,10 @@ carrier_capabilities = {}
 for key, data in matrix.items():
     carrier = data["carrier"]
     service_level = data["service_level"]
-    
+
     if carrier not in carrier_capabilities:
         carrier_capabilities[carrier] = {}
-    
+
     carrier_capabilities[carrier][service_level] = {
         "supported_extras": [
             e["extra"] for e in data["accepted"]
@@ -286,29 +404,10 @@ Washington, DC 20500
 London, SW1A 2AA, UK
 ```
 
-To modify these, edit the constants in `test_shippo_extras.py`:
+To modify these, edit the constants in `shippo_extras.py`:
 - `TEST_ADDRESS_FROM`
 - `TEST_ADDRESS_TO`
 - `TEST_ADDRESS_INTERNATIONAL`
-
----
-
-## Rate Limiting
-
-The Shippo API has rate limits. The test suite includes:
-
-- 0.5 second delay between requests
-- Rate limit header monitoring
-- Automatic slowdown when limits are approached
-
-If you hit rate limits:
-
-```bash
-# Reduce test scope
-python test_shippo_extras.py -c usps --max-tests 50
-
-# Or wait and resume (results are saved incrementally)
-```
 
 ---
 
@@ -452,8 +551,11 @@ echo $SHIPPO_API_KEY
 ### "Rate limited" errors
 
 ```bash
-# Reduce test scope
-python test_shippo_extras.py --max-tests 20
+# Reduce concurrency
+uv run python src/shippo_extras.py -j 2
+
+# Or reduce scope
+uv run python src/shippo_extras.py --max-tests 20
 
 # Wait a few minutes and retry
 ```
@@ -465,14 +567,17 @@ Some service levels aren't available for test addresses. This is normal - the te
 ### Tests taking too long
 
 ```bash
-# Test fewer carriers
-python test_shippo_extras.py -c usps
+# Increase concurrency (if not hitting rate limits)
+uv run python src/shippo_extras.py -j 15
 
-# Test fewer extras
-python test_shippo_extras.py -e signature_confirmation -e insurance_shippo
+# Validate fewer carriers
+uv run python src/shippo_extras.py -c usps
 
-# Limit total tests
-python test_shippo_extras.py --max-tests 100
+# Validate fewer extras
+uv run python src/shippo_extras.py -e signature_confirmation -e insurance_shippo
+
+# Limit total validations
+uv run python src/shippo_extras.py --max-tests 100
 ```
 
 ---
@@ -481,7 +586,7 @@ python test_shippo_extras.py --max-tests 100
 
 ### Adding New Extras
 
-Edit `test_shippo_extras.py` and add to `EXTRAS_TO_TEST`:
+Edit `shippo_extras.py` and add to `EXTRAS_TO_TEST`:
 
 ```python
 ExtraDefinition(
@@ -495,7 +600,7 @@ ExtraDefinition(
 
 ### Custom Test Addresses
 
-Edit the address constants at the top of `test_shippo_extras.py`:
+Edit the address constants at the top of `shippo_extras.py`:
 
 ```python
 TEST_ADDRESS_FROM = {
@@ -507,7 +612,7 @@ TEST_ADDRESS_FROM = {
 
 ### Custom Parcel Dimensions
 
-Edit `TEST_PARCEL` in `test_shippo_extras.py`:
+Edit `TEST_PARCEL` in `shippo_extras.py`:
 
 ```python
 TEST_PARCEL = {
@@ -526,9 +631,31 @@ TEST_PARCEL = {
 
 | Module | Output Files |
 |--------|--------------|
-| `test_shippo_extras.py` | `*_raw.json`, `*_report.json`, `*_report.md` |
-| `comparative_test.py` | `*.json`, `*_matrix.json`, `*.md` |
+| `shippo_extras.py` | `*_raw.json`, `*_report.json`, `*_report.md` |
+| `comparative_runner.py` | `*.json`, `*_matrix.json`, `*.md` |
 | `service_level_analyzer.py` | `*_results.json`, `*_matrices.json`, `*_report.md` |
+
+---
+
+## Running Tests
+
+### Async Behavior Tests
+
+Verify the async implementation works correctly:
+
+```bash
+# Run all async tests
+make test
+
+# Run with verbose output
+uv run pytest test/test_async_behavior.py -v
+
+# Run specific test class
+uv run pytest test/test_async_behavior.py::TestRaceConditionProtection -v
+
+# Run with coverage
+make test-cov
+```
 
 ---
 

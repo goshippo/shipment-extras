@@ -2,143 +2,77 @@
 
 Empirical testing suite to discover which shipment extras are supported by each carrier and service level in the Shippo API.
 
-## Background
+## Overview
 
-This project originated from a technical discovery call with **Ordoro**, a Shippo partner, to determine which shipment extras should be available for each carrier and service level. During integration discussions, it became clear that the existing API documentation and MCP schema lacked comprehensive carrier-to-extras mappings, making it difficult for partners to build accurate shipping UIs and construct valid API requests.
+This project originated from a technical discovery call with **Ordoro**, a Shippo partner, to determine which shipment extras should be available for each carrier and service level. The existing API documentation and MCP schema lacked comprehensive carrier-to-extras mappings, making it difficult for partners to build accurate shipping UIs and construct valid API requests.
 
-This suite was built to empirically test every carrier/service/extra combination and produce actionable documentation that can be used to:
+This suite empirically tests every carrier/service/extra combination and produces actionable documentation that can be used to:
 - Inform partner integrations (like Ordoro's)
 - Update the Shippo API swagger specification
 - Improve developer experience with accurate capability matrices
 
-## Why This Exists
+## Quick Start
 
-The Shippo API documentation and MCP schema don't provide a complete carrier-to-extras mapping. Different carriers support different shipment extras (signature confirmation, insurance, COD, etc.), and this support varies by service level within the same carrier.
+```bash
+# 1. Clone and install dependencies
+git clone <repo-url>
+cd shipment-extras
+make install-dev
 
-This suite tests each combination empirically and builds a comprehensive capability matrix, enabling:
-- **Accurate feature toggles** in shipping UIs
-- **Valid API request construction** per carrier/service
-- **Documentation updates** for the Shippo swagger spec
+# 2. Set your API key
+export SHIPPO_API_KEY="shippo_test_xxxxx"
 
-## How We Tested
+# 3. List connected carriers
+make list-carriers
 
-### Evaluation Methodology
+# 4. Run a quick test
+make run-discovery-quick
 
-Each shipment extra is evaluated through a multi-stage testing process designed to determine not just whether an extra is accepted, but whether it actually affects the shipment.
-
-#### Stage 1: Discovery Testing
-
-**File**: `tests/test_shippo_extras.py`
-
-Creates shipments with each extra and analyzes the API response:
-
-```
-┌─────────────────────┐     ┌─────────────┐     ┌──────────────────┐
-│ Shipment + Extra    │────▶│ Shippo API  │────▶│ Response Analysis│
-└─────────────────────┘     └─────────────┘     └──────────────────┘
-                                                         │
-                            ┌────────────────────────────┼────────────────────────────┐
-                            ▼                            ▼                            ▼
-                     ┌─────────────┐            ┌─────────────┐            ┌─────────────────┐
-                     │  ACCEPTED   │            │  REJECTED   │            │     ERROR       │
-                     │ Rates exist │            │  API Error  │            │ Service N/A     │
-                     └─────────────┘            └─────────────┘            └─────────────────┘
+# 5. Run full discovery suite
+make run-discovery
 ```
 
-**Output Files**:
-| File | Description |
-|------|-------------|
-| `analysis/shippo_extras_results_raw.json` | Complete test execution data for every carrier/service/extra combination |
-| `analysis/shippo_extras_results_report.json` | Aggregated support matrix by carrier |
-| `analysis/shippo_extras_results_report.md` | Human-readable summary with findings |
+## Development Setup
 
-#### Stage 2: Comparative Testing
+### Requirements
 
-**File**: `tests/comparative_test.py`
+- **Python**: 3.11+ (required for async features)
+- **uv**: Fast Python package manager ([install uv](https://docs.astral.sh/uv/getting-started/installation/))
+- **API Key**: Shippo test or live API key with connected carriers
 
-The key innovation—creates a **baseline shipment without extras**, then compares it to shipments **with** each extra to detect actual support vs. silent ignoring:
+### Installation
 
-```
-┌─────────────────────┐                    ┌─────────────────────┐
-│ Baseline Shipment   │                    │ Shipment + Extra    │
-│ (no extras)         │                    │                     │
-└─────────┬───────────┘                    └─────────┬───────────┘
-          │                                          │
-          ▼                                          ▼
-┌─────────────────────┐                    ┌─────────────────────┐
-│ Baseline Response   │◀───── COMPARE ─────▶│ Extra Response      │
-│ - rates             │                    │ - rates             │
-│ - messages          │                    │ - messages          │
-│ - available svcs    │                    │ - available svcs    │
-└─────────────────────┘                    └─────────────────────┘
-                                                     │
-          ┌──────────────────────────────────────────┼──────────────────────────────────────────┐
-          ▼                                          ▼                                          ▼
-   ┌─────────────┐                           ┌─────────────┐                           ┌─────────────┐
-   │ RATES SAME  │                           │RATES DIFFER │                           │ EXTRA FAILED│
-   │ = IGNORED   │                           │= MODIFIED   │                           │ = REJECTED  │
-   └─────────────┘                           └─────────────┘                           └─────────────┘
+```bash
+# Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install runtime dependencies only
+make install
+
+# Install with development dependencies (includes testing tools)
+make install-dev
+
+# Sync dependencies from lockfile
+make sync
 ```
 
-**Output Files**:
-| File | Description |
-|------|-------------|
-| `*_comparative.json` | Detailed baseline vs. extra comparison results |
-| `*_comparative_matrix.json` | Per-service-level support matrix |
-| `*_comparative.md` | Markdown report with recommendations |
+### Environment Configuration
 
-#### Stage 3: Service Level Analysis
+```bash
+# Required: Set your Shippo API key
+export SHIPPO_API_KEY="shippo_test_xxxxxxxxxxxxxxxxxxxxx"
 
-**File**: `analysis/service_level_analyzer.py`
+# Optional: Add to ~/.zshrc or ~/.profile for persistence
+echo 'export SHIPPO_API_KEY="shippo_test_xxxxx"' >> ~/.zshrc
+```
 
-Categorizes service levels (express, ground, economy) and identifies patterns like "Saturday delivery only works with express services":
+### Connecting Carriers
 
-**Output Files**:
-| File | Description |
-|------|-------------|
-| `*_service_results.json` | Results tagged with service tier categories |
-| `*_service_matrices.json` | Cross-tier support comparison |
-| `*_service_report.md` | Pattern analysis report |
+The tests only work for carriers you have connected in your Shippo account:
 
-#### Stage 4: Per-Carrier Report Generation
-
-**File**: `analysis/split_report.py`
-
-Splits the master report into individual carrier reports for focused review:
-
-**Output Files**:
-| File | Description |
-|------|-------------|
-| `analysis/carrier_reports/{carrier}_report.md` | Individual carrier analysis with service-level breakdown |
-
-### Validation Types
-
-Each test produces one of the following validation results:
-
-| Result | What Happens | Confidence | Interpretation |
-|--------|--------------|------------|----------------|
-| `EXTRA_ACCEPTED` | API accepts request, returns rates | **High** | Extra is recognized by the carrier |
-| `EXTRA_REJECTED` | API returns error mentioning the extra | **High** | Extra is explicitly not supported |
-| `EXTRA_MODIFIED_RATES` | Rate amounts differ from baseline | **Very High** | Extra is actively applied (e.g., signature adds $2.50) |
-| `EXTRA_IGNORED` | Response identical to baseline | **Low** | Extra may be unsupported, or supported but with no visible effect |
-| `BASELINE_FAILED` | Baseline shipment couldn't be created | **N/A** | Service level not available for test route |
-| `INVALID_VALUE` | Error indicates wrong value format | **Medium** | Extra exists but test value may be incorrect |
-
-#### Understanding Confidence Levels
-
-- **Very High (`EXTRA_MODIFIED_RATES`)**: The extra demonstrably changed something—this is definitive proof of support
-- **High (`EXTRA_ACCEPTED`, `EXTRA_REJECTED`)**: Clear API signal about support or rejection
-- **Low (`EXTRA_IGNORED`)**: Requires investigation—the extra might be:
-  - Truly unsupported (carrier ignores unknown fields)
-  - Supported but inactive (e.g., no rate impact for this route)
-  - Requires specific conditions (e.g., alcohol extras need alcohol shipment content)
-
-### Test Data
-
-- **Origin**: San Francisco, CA (215 Clayton St, 94117)
-- **Domestic Destination**: Washington, DC (1600 Pennsylvania Ave NW, 20500)
-- **International Destination**: London, UK (10 Downing Street, SW1A 2AA)
-- **Parcel**: 10x8x4 in, 2 lb
+1. Go to [Shippo Carriers](https://apps.goshippo.com/settings/carriers)
+2. Add the carriers you want to test
+3. Ensure they are marked as "Active"
 
 ## Project Structure
 
@@ -146,17 +80,24 @@ Each test produces one of the following validation results:
 shipment-extras/
 ├── README.md                    # This file
 ├── INSTRUCTIONS.md              # Detailed usage instructions
+├── Makefile                     # Development workflow automation
+├── pyproject.toml               # Project metadata and dependencies (uv)
+├── uv.lock                      # Locked dependencies
+├── pytest.ini                   # Pytest configuration
 │
-├── tests/                       # Test execution scripts
-│   ├── test_shippo_extras.py    # Basic discovery tests
-│   └── comparative_test.py      # Comparative analysis tests
+├── src/                         # Main source modules
+│   ├── shippo_extras.py         # Core extras discovery (async)
+│   └── comparative_runner.py    # Comparative analysis runner (async)
+│
+├── test/                        # Unit tests
+│   └── test_async_behavior.py   # Async behavior unit tests
 │
 ├── analysis/                    # Results and analysis
+│   ├── service_level_analyzer.py           # Service-level pattern analyzer (async)
+│   ├── split_report.py                     # Report splitting utility
 │   ├── shippo_extras_results_raw.json      # Raw test results
 │   ├── shippo_extras_results_report.json   # Aggregated report
 │   ├── shippo_extras_results_report.md     # Human-readable summary
-│   ├── service_level_analyzer.py           # Service-level pattern analyzer
-│   ├── split_report.py                     # Report splitting utility
 │   │
 │   └── carrier_reports/                    # Per-carrier analysis
 │       ├── usps_report.md
@@ -168,174 +109,261 @@ shipment-extras/
     │
     └── swagger_update_prompts/  # Prompts for updating swagger spec
         ├── usps_swagger_prompt.md
-        ├── ups_swagger_prompt.md
         └── ...
 ```
 
-## Results Structure
+## Usage
 
-### Raw Results (`*_raw.json`)
-
-Complete test execution data:
-```json
-{
-  "carrier": "usps",
-  "service_level": "usps_priority",
-  "extra_name": "signature_confirmation",
-  "extra_value": "STANDARD",
-  "result": "ACCEPTED",
-  "rates_returned": 3,
-  "response_time_ms": 245,
-  "full_response": { ... }
-}
-```
-
-### Aggregated Report (`*_report.json`)
-
-Summarized by carrier and extra:
-```json
-{
-  "usps": {
-    "signature_confirmation": {
-      "supported_services": ["usps_priority", "usps_express"],
-      "rejected_services": [],
-      "unknown_services": ["usps_ground_advantage"]
-    }
-  }
-}
-```
-
-### Carrier Reports (`analysis/carrier_reports/*.md`)
-
-Human-readable analysis per carrier including:
-- Supported extras with which service levels
-- Rejected extras with error details
-- Recommendations for swagger updates
-
-### Swagger Update Prompts (`swagger/swagger_update_prompts/*.md`)
-
-Ready-to-use prompts for updating the Shippo swagger spec with discovered carrier capabilities. Each prompt contains carrier-specific findings formatted for direct use in updating `swagger/swagger.yaml`.
-
-## Result Categories
-
-See [Validation Types](#validation-types) above for detailed explanation of each result category and confidence levels.
-
-## Quick Start
+### Makefile Targets
 
 ```bash
-# Set API key
-export SHIPPO_API_KEY="shippo_test_xxxxx"
+# Setup
+make install          # Install runtime dependencies
+make install-dev      # Install with development dependencies
+make sync             # Sync dependencies from lockfile
 
-# List available carriers
-python tests/test_shippo_extras.py --list-carriers
+# Quality Assurance
+make lint             # Run ruff linter
+make format           # Format code with ruff
+make test             # Run async behavior test suite
+make quality          # Run all quality checks
 
-# Run a quick test
-python tests/test_shippo_extras.py --carrier usps --max-tests 10
+# Discovery Tests
+make list-carriers    # List connected carrier accounts
+make list-extras      # List all testable extras
+make run-discovery    # Run basic discovery tests
+make run-comparative  # Run comparative analysis
+make run-analyzer     # Run service level analyzer
 
-# Run full discovery
-python tests/test_shippo_extras.py
-
-# Run comparative analysis
-python tests/comparative_test.py
+# Custom runs
+make run-carrier CARRIER=usps     # Test specific carrier
+make run-fast CONCURRENCY=20      # Run with higher concurrency
 ```
 
-See `INSTRUCTIONS.md` for detailed usage, troubleshooting, and extension guidance.
+### Command Line Options
+
+All test scripts support the following options:
+
+```bash
+# Concurrency control (async parallel requests)
+uv run python src/shippo_extras.py -j 10  # 10 concurrent requests (default: 5)
+
+# Filter by carrier
+uv run python src/shippo_extras.py -c usps -c fedex
+
+# Filter by service level
+uv run python src/shippo_extras.py -c fedex -s fedex_ground -s fedex_2_day
+
+# Filter by extra
+uv run python src/shippo_extras.py -e signature_confirmation -e insurance_shippo
+
+# Limit test count
+uv run python src/shippo_extras.py --max-tests 50
+
+# Custom output filename
+uv run python src/shippo_extras.py -o my_results
+```
+
+## Testing
+
+### Async Behavior Tests
+
+The test suite includes comprehensive tests for async behavior and race condition handling:
+
+```bash
+# Run async tests
+make test
+
+# Run with coverage
+make test-cov
+
+# Run specific test class
+uv run pytest test/test_async_behavior.py::TestRaceConditionProtection -v
+```
+
+### Test Categories
+
+| Category | Tests | Purpose |
+|----------|-------|---------|
+| Async Client Basics | 2 | Context manager, semaphore limiting |
+| Rate Limiting | 2 | Retry logic, proactive waiting |
+| Race Condition Protection | 2 | Cache locking, non-blocking parallel keys |
+| Result Consistency | 3 | Exception handling, order preservation |
+| Semaphore Under Load | 3 | Fairness, no deadlock, high contention |
+| Lock Behavior | 2 | Mutual exclusion, no corruption |
+| Integration | 1 | Full mock test run |
+| Stress Tests | 2 | 500 concurrent tasks, rapid cache access |
+
+## How We Tested
+
+### Evaluation Methodology
+
+Each shipment extra is evaluated through a multi-stage testing process designed to determine not just whether an extra is accepted, but whether it actually affects the shipment.
+
+#### Stage 1: Discovery Testing (`shippo_extras.py`)
+
+Creates shipments with each extra and analyzes the API response:
+
+```
+┌─────────────────────┐     ┌─────────────┐     ┌──────────────────┐
+│ Shipment + Extra    │────▶│ Shippo API  │────▶│ Response Analysis│
+└─────────────────────┘     └─────────────┘     └──────────────────┘
+                                                        │
+                           ┌────────────────────────────┼────────────────────────────┐
+                           ▼                            ▼                            ▼
+                    ┌─────────────┐            ┌─────────────┐            ┌─────────────────┐
+                    │  ACCEPTED   │            │  REJECTED   │            │     ERROR       │
+                    │ Rates exist │            │  API Error  │            │ Service N/A     │
+                    └─────────────┘            └─────────────┘            └─────────────────┘
+```
+
+#### Stage 2: Comparative Testing (`comparative_runner.py`)
+
+Creates a **baseline shipment without extras**, then compares it to shipments **with** each extra to detect actual support vs. silent ignoring:
+
+```
+┌─────────────────────┐                    ┌─────────────────────┐
+│ Baseline Shipment   │                    │ Shipment + Extra    │
+│ (no extras)         │                    │                     │
+└─────────┬───────────┘                    └─────────┬───────────┘
+          │                                          │
+          ▼                                          ▼
+┌─────────────────────┐                    ┌─────────────────────┐
+│ Baseline Response   │◀───── COMPARE ─────▶│ Extra Response      │
+└─────────────────────┘                    └─────────────────────┘
+                                                    │
+         ┌──────────────────────────────────────────┼──────────────────────────────────────────┐
+         ▼                                          ▼                                          ▼
+  ┌─────────────┐                           ┌─────────────┐                           ┌─────────────┐
+  │ RATES SAME  │                           │RATES DIFFER │                           │ EXTRA FAILED│
+  │ = IGNORED   │                           │= MODIFIED   │                           │ = REJECTED  │
+  └─────────────┘                           └─────────────┘                           └─────────────┘
+```
+
+#### Stage 3: Service Level Analysis (`service_level_analyzer.py`)
+
+Categorizes service levels (express, ground, economy) and identifies patterns like "Saturday delivery only works with express services."
+
+### Validation Types
+
+| Result | What Happens | Confidence | Interpretation |
+|--------|--------------|------------|----------------|
+| `EXTRA_ACCEPTED` | API accepts request, returns rates | **High** | Extra is recognized by the carrier |
+| `EXTRA_REJECTED` | API returns error mentioning the extra | **High** | Extra is explicitly not supported |
+| `EXTRA_MODIFIED_RATES` | Rate amounts differ from baseline | **Very High** | Extra is actively applied (e.g., signature adds $2.50) |
+| `EXTRA_IGNORED` | Response identical to baseline | **Low** | Extra may be unsupported, or supported but with no visible effect |
+| `BASELINE_FAILED` | Baseline shipment couldn't be created | **N/A** | Service level not available for test route |
+
+## Architecture
+
+### Async HTTP Client
+
+All test scripts use an async HTTP client (`httpx.AsyncClient`) with:
+
+- **Concurrency control**: `asyncio.Semaphore` limits parallel requests (default: 5)
+- **Rate limiting**: Monitors `X-RateLimit-*` headers and 429 responses
+- **Automatic retry**: Retries on rate limit with exponential backoff
+- **Connection pooling**: Efficient connection reuse
+
+### Race Condition Protection
+
+Shared resources (baseline caches) are protected with `asyncio.Lock`:
+
+```python
+async with self._baseline_lock:
+    if cache_key in self.baseline_cache:
+        return self.baseline_cache[cache_key]
+```
+
+### Parallel Execution
+
+Tests run in parallel using `asyncio.gather()`:
+
+```python
+tasks = [test_extra(e) for e in extras]
+results = await asyncio.gather(*tasks, return_exceptions=True)
+```
+
+## Test Data
+
+- **Origin**: San Francisco, CA (215 Clayton St, 94117)
+- **Domestic Destination**: Washington, DC (1600 Pennsylvania Ave NW, 20500)
+- **International Destination**: London, UK (10 Downing Street, SW1A 2AA)
+- **Parcel**: 10x8x4 in, 2 lb
 
 ## Extras Tested
 
-This suite tests **42 distinct extras** from the [Shippo Shipment Extras API](https://goshippo.com/docs/reference#shipments-extras) across the following categories:
+This suite tests **42 distinct extras** across the following categories:
 
 ### Signature Confirmation
-- `STANDARD` - Standard signature confirmation
-- `ADULT` - Adult signature required
-- `CERTIFIED` - Certified mail (USPS)
-- `INDIRECT` - Indirect signature (FedEx)
-- `CARRIER_CONFIRMATION` - Carrier confirmation (Deutsche Post)
+- `STANDARD`, `ADULT`, `CERTIFIED` (USPS), `INDIRECT` (FedEx), `CARRIER_CONFIRMATION` (Deutsche Post)
 
 ### Insurance
-- **Shippo/XCover** - Third-party insurance via Shippo
-- **FedEx** - Carrier-provided insurance (provider: FEDEX)
-- **UPS** - Carrier-provided insurance (provider: UPS)
-- **OnTrac** - Carrier-provided insurance (provider: ONTRAC)
+- Shippo/XCover third-party insurance
+- Carrier-provided: FedEx, UPS, OnTrac
 
 ### COD (Collect on Delivery)
-- `ANY` - Any payment method accepted
-- `CASH` - Cash only
-- `SECURED_FUNDS` - Secured funds (money orders, certified checks)
+- `ANY`, `CASH`, `SECURED_FUNDS`
 
 ### Billing
-- `RECIPIENT` - Bill recipient for shipping
-- `THIRD_PARTY` - Bill third party account
-- `COLLECT` - Collect billing
+- `RECIPIENT`, `THIRD_PARTY`, `COLLECT`
 
 ### Alcohol & Hazmat
-- **Alcohol** - consumer and licensee recipient types
-- **Dry Ice** - Weight-specified dry ice shipments
-- **Dangerous Goods** - General dangerous goods flag
-- **Lithium Batteries** - Lithium battery contents
-- **Biological Material** - Biological material contents
-- **DG Code** - DHL eCommerce dangerous goods codes
+- Alcohol (consumer/licensee), Dry Ice, Dangerous Goods, Lithium Batteries, Biological Material
 
 ### Delivery Options
-- `saturday_delivery` - Saturday delivery service
-- `authority_to_leave` - Leave without signature
-- `delivery_instructions` - Custom delivery instructions
-- `carbon_neutral` - Carbon neutral shipping
-- `premium` - Premium service tier
+- `saturday_delivery`, `authority_to_leave`, `delivery_instructions`, `carbon_neutral`, `premium`
 
 ### Reference Fields
-- `reference_1` / `reference_2` - Generic reference fields
-- `customer_reference` - Customer reference on label
-- `po_number` - Purchase order number
-- `invoice_number` - Invoice number
-- `dept_number` - Department number
-- `rma_number` - Return merchandise authorization
+- `reference_1/2`, `customer_reference`, `po_number`, `invoice_number`, `dept_number`, `rma_number`
 
 ### Return Options
-- `is_return` - Mark as return shipment
-- `return_service_type` - PRINT_AND_MAIL, ELECTRONIC_LABEL
+- `is_return`, `return_service_type`
 
-### Other Extras
-- `qr_code_requested` - Request QR code for label
-- `bypass_address_validation` - Skip address validation
-- `ancillary_endorsement` - FORWARDING_SERVICE_REQUESTED, RETURN_SERVICE_REQUESTED (DHL eCommerce)
-- `preferred_delivery_timeframe` - Delivery time window (DHL Germany)
-- `lasership_declared_value` - Declared value (LaserShip)
-- `lasership_attrs` - Special attributes: Alcohol, Perishable (LaserShip)
+See `INSTRUCTIONS.md` for the complete extras reference.
 
-## Extras NOT Tested
+## Output Files
 
-The following extras exist in the [Shippo API schema](https://goshippo.com/docs/reference#shipments-extras) but were **not included** in this test suite (typically specialized reference/tracking fields with limited carrier support):
+| Module | Output Files |
+|--------|--------------|
+| `shippo_extras.py` | `*_raw.json`, `*_report.json`, `*_report.md` |
+| `comparative_runner.py` | `*.json`, `*_matrix.json`, `*.md` |
+| `service_level_analyzer.py` | `*_results.json`, `*_matrices.json`, `*_report.md` |
 
-| Extra | Description |
-|-------|-------------|
-| `accounts_receivable_customer_account` | AR customer account reference |
-| `appropriation_number` | Appropriation number reference |
-| `bill_of_lading_number` | Bill of lading reference |
-| `carrier_hub_id` | Carrier hub identifier |
-| `carrier_hub_travel_time` | Hub travel time specification |
-| `cod_number` | COD reference number |
-| `container_type` | Container type specification |
-| `critical_pull_time` | Critical pull time for fulfillment |
-| `customer_branch` | Customer branch identifier |
-| `dealer_order_number` | Dealer order reference |
-| `fda_product_code` | FDA product code for regulated items |
-| `fulfillment_center` | Fulfillment center identifier |
-| `manifest_number` | Manifest reference number |
-| `model_number` | Model number reference |
-| `part_number` | Part number reference |
-| `production_code` | Production code reference |
-| `purchase_request_number` | Purchase request reference |
-| `request_retail_rates` | Request retail rate pricing |
-| `salesperson_number` | Salesperson reference |
-| `serial_number` | Serial number reference |
-| `store_number` | Store number reference |
-| `transaction_reference_number` | Transaction reference |
+## Troubleshooting
 
-> **Note**: These extras are primarily specialized reference fields used for internal tracking, B2B shipments, or carrier-specific workflows. They can be added to the test suite by extending `EXTRAS_TO_TEST` in `tests/test_shippo_extras.py`.
+### "Authentication failed" error
+
+```bash
+# Verify your API key is set
+echo $SHIPPO_API_KEY
+# Should start with "shippo_test_" or "shippo_live_"
+```
+
+### "No carriers found"
+
+1. Check that you have carriers connected in Shippo dashboard
+2. Ensure carriers are marked as "Active"
+3. Verify API key has access to those carriers
+
+### Rate limiting
+
+```bash
+# Reduce concurrency
+uv run python src/shippo_extras.py -j 2
+
+# Or reduce test scope
+uv run python src/shippo_extras.py --max-tests 20
+```
 
 ## Requirements
 
-- Python 3.8+
-- `requests` library
-- Shippo API key with connected carrier accounts
+- Python 3.11+
+- `httpx>=0.25.0` - Async HTTP client
+- `pytest>=7.0.0` - Test framework (dev)
+- `pytest-asyncio>=0.21.0` - Async test support (dev)
+- `ruff>=0.1.0` - Linting and formatting (dev)
+
+## License
+
+This test suite is provided as-is for integration development purposes.
