@@ -22,23 +22,116 @@ This suite tests each combination empirically and builds a comprehensive capabil
 
 ## How We Tested
 
-### Methodology
+### Evaluation Methodology
 
-1. **Discovery Testing** (`tests/test_shippo_extras.py`): Creates shipments with each extra and checks if the API returns rates or errors
-2. **Comparative Testing** (`tests/comparative_test.py`): Creates baseline shipments without extras, then with each extra, comparing responses to detect actual support vs. silent ignoring
-3. **Service Level Analysis** (`analysis/service_level_analyzer.py`): Identifies patterns in extra support across service tiers (express, ground, economy)
+Each shipment extra is evaluated through a multi-stage testing process designed to determine not just whether an extra is accepted, but whether it actually affects the shipment.
 
-### Test Flow
+#### Stage 1: Discovery Testing
+
+**File**: `tests/test_shippo_extras.py`
+
+Creates shipments with each extra and analyzes the API response:
 
 ```
-Shipment Request + Extra → Shippo API → Response Analysis → Support Matrix
+┌─────────────────────┐     ┌─────────────┐     ┌──────────────────┐
+│ Shipment + Extra    │────▶│ Shippo API  │────▶│ Response Analysis│
+└─────────────────────┘     └─────────────┘     └──────────────────┘
+                                                         │
+                            ┌────────────────────────────┼────────────────────────────┐
+                            ▼                            ▼                            ▼
+                     ┌─────────────┐            ┌─────────────┐            ┌─────────────────┐
+                     │  ACCEPTED   │            │  REJECTED   │            │     ERROR       │
+                     │ Rates exist │            │  API Error  │            │ Service N/A     │
+                     └─────────────┘            └─────────────┘            └─────────────────┘
 ```
 
-Each test:
-1. Constructs a valid shipment with a specific extra
-2. Calls the Shippo Rates/Shipments API
-3. Analyzes the response for acceptance, rejection, or modification
-4. Records the result with full context
+**Output Files**:
+| File | Description |
+|------|-------------|
+| `analysis/shippo_extras_results_raw.json` | Complete test execution data for every carrier/service/extra combination |
+| `analysis/shippo_extras_results_report.json` | Aggregated support matrix by carrier |
+| `analysis/shippo_extras_results_report.md` | Human-readable summary with findings |
+
+#### Stage 2: Comparative Testing
+
+**File**: `tests/comparative_test.py`
+
+The key innovation—creates a **baseline shipment without extras**, then compares it to shipments **with** each extra to detect actual support vs. silent ignoring:
+
+```
+┌─────────────────────┐                    ┌─────────────────────┐
+│ Baseline Shipment   │                    │ Shipment + Extra    │
+│ (no extras)         │                    │                     │
+└─────────┬───────────┘                    └─────────┬───────────┘
+          │                                          │
+          ▼                                          ▼
+┌─────────────────────┐                    ┌─────────────────────┐
+│ Baseline Response   │◀───── COMPARE ─────▶│ Extra Response      │
+│ - rates             │                    │ - rates             │
+│ - messages          │                    │ - messages          │
+│ - available svcs    │                    │ - available svcs    │
+└─────────────────────┘                    └─────────────────────┘
+                                                     │
+          ┌──────────────────────────────────────────┼──────────────────────────────────────────┐
+          ▼                                          ▼                                          ▼
+   ┌─────────────┐                           ┌─────────────┐                           ┌─────────────┐
+   │ RATES SAME  │                           │RATES DIFFER │                           │ EXTRA FAILED│
+   │ = IGNORED   │                           │= MODIFIED   │                           │ = REJECTED  │
+   └─────────────┘                           └─────────────┘                           └─────────────┘
+```
+
+**Output Files**:
+| File | Description |
+|------|-------------|
+| `*_comparative.json` | Detailed baseline vs. extra comparison results |
+| `*_comparative_matrix.json` | Per-service-level support matrix |
+| `*_comparative.md` | Markdown report with recommendations |
+
+#### Stage 3: Service Level Analysis
+
+**File**: `analysis/service_level_analyzer.py`
+
+Categorizes service levels (express, ground, economy) and identifies patterns like "Saturday delivery only works with express services":
+
+**Output Files**:
+| File | Description |
+|------|-------------|
+| `*_service_results.json` | Results tagged with service tier categories |
+| `*_service_matrices.json` | Cross-tier support comparison |
+| `*_service_report.md` | Pattern analysis report |
+
+#### Stage 4: Per-Carrier Report Generation
+
+**File**: `analysis/split_report.py`
+
+Splits the master report into individual carrier reports for focused review:
+
+**Output Files**:
+| File | Description |
+|------|-------------|
+| `analysis/carrier_reports/{carrier}_report.md` | Individual carrier analysis with service-level breakdown |
+
+### Validation Types
+
+Each test produces one of the following validation results:
+
+| Result | What Happens | Confidence | Interpretation |
+|--------|--------------|------------|----------------|
+| `EXTRA_ACCEPTED` | API accepts request, returns rates | **High** | Extra is recognized by the carrier |
+| `EXTRA_REJECTED` | API returns error mentioning the extra | **High** | Extra is explicitly not supported |
+| `EXTRA_MODIFIED_RATES` | Rate amounts differ from baseline | **Very High** | Extra is actively applied (e.g., signature adds $2.50) |
+| `EXTRA_IGNORED` | Response identical to baseline | **Low** | Extra may be unsupported, or supported but with no visible effect |
+| `BASELINE_FAILED` | Baseline shipment couldn't be created | **N/A** | Service level not available for test route |
+| `INVALID_VALUE` | Error indicates wrong value format | **Medium** | Extra exists but test value may be incorrect |
+
+#### Understanding Confidence Levels
+
+- **Very High (`EXTRA_MODIFIED_RATES`)**: The extra demonstrably changed something—this is definitive proof of support
+- **High (`EXTRA_ACCEPTED`, `EXTRA_REJECTED`)**: Clear API signal about support or rejection
+- **Low (`EXTRA_IGNORED`)**: Requires investigation—the extra might be:
+  - Truly unsupported (carrier ignores unknown fields)
+  - Supported but inactive (e.g., no rate impact for this route)
+  - Requires specific conditions (e.g., alcohol extras need alcohol shipment content)
 
 ### Test Data
 
@@ -125,13 +218,7 @@ Ready-to-use prompts for updating the Shippo swagger spec with discovered carrie
 
 ## Result Categories
 
-| Category | Meaning | Confidence |
-|----------|---------|------------|
-| `EXTRA_ACCEPTED` | Extra recognized, shipment created | High |
-| `EXTRA_REJECTED` | Extra caused explicit failure | High |
-| `EXTRA_MODIFIED_RATES` | Extra changed the rate amount | Very High |
-| `EXTRA_IGNORED` | No visible difference from baseline | Low |
-| `BASELINE_FAILED` | Couldn't create baseline shipment | N/A |
+See [Validation Types](#validation-types) above for detailed explanation of each result category and confidence levels.
 
 ## Quick Start
 
