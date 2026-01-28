@@ -243,15 +243,96 @@ See `INSTRUCTIONS.md` for detailed usage, troubleshooting, and extension guidanc
 
 ## Extras Tested
 
-- **Signature**: STANDARD, ADULT, CERTIFIED, INDIRECT, CARRIER_CONFIRMATION
-- **Insurance**: Shippo (XCover), FedEx, UPS, OnTrac declared value
-- **COD**: ANY, CASH, SECURED_FUNDS
-- **Billing**: RECIPIENT, THIRD_PARTY, COLLECT
-- **Hazmat**: Alcohol, Dry Ice, Dangerous Goods, Lithium Batteries
-- **Delivery**: Saturday, Authority to Leave, Instructions, Carbon Neutral
-- **References**: Customer Reference, PO Number, Invoice, RMA, Department
-- **Returns**: Is Return, Print and Mail, Electronic Label
-- **Carrier-Specific**: DHL endorsements, LaserShip attributes, and more
+This suite tests **42 distinct extras** from the [Shippo Shipment Extras API](https://goshippo.com/docs/reference#shipments-extras) across the following categories:
+
+### Signature Confirmation
+- `STANDARD` - Standard signature confirmation
+- `ADULT` - Adult signature required
+- `CERTIFIED` - Certified mail (USPS)
+- `INDIRECT` - Indirect signature (FedEx)
+- `CARRIER_CONFIRMATION` - Carrier confirmation (Deutsche Post)
+
+### Insurance
+- **Shippo/XCover** - Third-party insurance via Shippo
+- **FedEx** - Carrier-provided insurance (provider: FEDEX)
+- **UPS** - Carrier-provided insurance (provider: UPS)
+- **OnTrac** - Carrier-provided insurance (provider: ONTRAC)
+
+### COD (Collect on Delivery)
+- `ANY` - Any payment method accepted
+- `CASH` - Cash only
+- `SECURED_FUNDS` - Secured funds (money orders, certified checks)
+
+### Billing
+- `RECIPIENT` - Bill recipient for shipping
+- `THIRD_PARTY` - Bill third party account
+- `COLLECT` - Collect billing
+
+### Alcohol & Hazmat
+- **Alcohol** - consumer and licensee recipient types
+- **Dry Ice** - Weight-specified dry ice shipments
+- **Dangerous Goods** - General dangerous goods flag
+- **Lithium Batteries** - Lithium battery contents
+- **Biological Material** - Biological material contents
+- **DG Code** - DHL eCommerce dangerous goods codes
+
+### Delivery Options
+- `saturday_delivery` - Saturday delivery service
+- `authority_to_leave` - Leave without signature
+- `delivery_instructions` - Custom delivery instructions
+- `carbon_neutral` - Carbon neutral shipping
+- `premium` - Premium service tier
+
+### Reference Fields
+- `reference_1` / `reference_2` - Generic reference fields
+- `customer_reference` - Customer reference on label
+- `po_number` - Purchase order number
+- `invoice_number` - Invoice number
+- `dept_number` - Department number
+- `rma_number` - Return merchandise authorization
+
+### Return Options
+- `is_return` - Mark as return shipment
+- `return_service_type` - PRINT_AND_MAIL, ELECTRONIC_LABEL
+
+### Other Extras
+- `qr_code_requested` - Request QR code for label
+- `bypass_address_validation` - Skip address validation
+- `ancillary_endorsement` - FORWARDING_SERVICE_REQUESTED, RETURN_SERVICE_REQUESTED (DHL eCommerce)
+- `preferred_delivery_timeframe` - Delivery time window (DHL Germany)
+- `lasership_declared_value` - Declared value (LaserShip)
+- `lasership_attrs` - Special attributes: Alcohol, Perishable (LaserShip)
+
+## Extras NOT Tested
+
+The following extras exist in the [Shippo API schema](https://goshippo.com/docs/reference#shipments-extras) but were **not included** in this test suite (typically specialized reference/tracking fields with limited carrier support):
+
+| Extra | Description |
+|-------|-------------|
+| `accounts_receivable_customer_account` | AR customer account reference |
+| `appropriation_number` | Appropriation number reference |
+| `bill_of_lading_number` | Bill of lading reference |
+| `carrier_hub_id` | Carrier hub identifier |
+| `carrier_hub_travel_time` | Hub travel time specification |
+| `cod_number` | COD reference number |
+| `container_type` | Container type specification |
+| `critical_pull_time` | Critical pull time for fulfillment |
+| `customer_branch` | Customer branch identifier |
+| `dealer_order_number` | Dealer order reference |
+| `fda_product_code` | FDA product code for regulated items |
+| `fulfillment_center` | Fulfillment center identifier |
+| `manifest_number` | Manifest reference number |
+| `model_number` | Model number reference |
+| `part_number` | Part number reference |
+| `production_code` | Production code reference |
+| `purchase_request_number` | Purchase request reference |
+| `request_retail_rates` | Request retail rate pricing |
+| `salesperson_number` | Salesperson reference |
+| `serial_number` | Serial number reference |
+| `store_number` | Store number reference |
+| `transaction_reference_number` | Transaction reference |
+
+> **Note**: These extras are primarily specialized reference fields used for internal tracking, B2B shipments, or carrier-specific workflows. They can be added to the test suite by extending `EXTRAS_TO_TEST` in `tests/test_shippo_extras.py`.
 
 ## Requirements
 
